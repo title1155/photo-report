@@ -7,11 +7,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
 
-# --- ตั้งค่า SMTP สำหรับ Gmail ---
+# --- ตั้งค่า SMTP สำหรับ Gmail แบบ SSL (Port 465) ---
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USE_SSL'] = False
+app.config['MAIL_PORT'] = 465
+app.config['MAIL_USE_TLS'] = False
+app.config['MAIL_USE_SSL'] = True
 app.config['MAIL_USERNAME'] = os.environ.get('EMAIL_USER')      # ptcuringfac1@gmail.com
 app.config['MAIL_PASSWORD'] = os.environ.get('EMAIL_PASSWORD')  # App Password 16 หลัก
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('EMAIL_USER')
@@ -104,7 +104,7 @@ def create_pdf():
                 append_images=pages[1:]
             )
 
-        # ส่งอีเมลจาก Gmail ไปยัง ptcuringfac1@hotmail.com
+        # ส่งอีเมลอัตโนมัติผ่าน Port 465 (SSL)
         try:
             msg = Message(
                 subject=f"[Photo Report] รายงาน PDF สำหรับ SIZE: {size}",
