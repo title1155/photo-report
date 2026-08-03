@@ -1,22 +1,10 @@
 import os
 from datetime import datetime
 from flask import Flask, render_template, request, send_file
-from flask_mail import Mail, Message
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
-
-# --- ตั้งค่า SMTP สำหรับ Gmail แบบ SSL (Port 465) ---
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 465
-app.config['MAIL_USE_TLS'] = False
-app.config['MAIL_USE_SSL'] = True
-app.config['MAIL_USERNAME'] = os.environ.get('EMAIL_USER')      # ptcuringfac1@gmail.com
-app.config['MAIL_PASSWORD'] = os.environ.get('EMAIL_PASSWORD')  # App Password 16 หลัก
-app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('EMAIL_USER')
-
-mail = Mail(app)
 
 OUTPUT_DIR = "generated"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -32,9 +20,6 @@ def create_pdf():
     try:
         raw_size = request.form.get("size", "REPORT")
         size = secure_filename(raw_size) or "REPORT"
-
-        # ระบุอีเมลปลายทางผู้รับเป็น Hotmail
-        recipient_email = "ptcuringfac1@hotmail.com"
 
         files = request.files.getlist("photos")
 
@@ -104,23 +89,6 @@ def create_pdf():
                 append_images=pages[1:]
             )
 
-        # ส่งอีเมลอัตโนมัติผ่าน Port 465 (SSL)
-        try:
-            msg = Message(
-                subject=f"[Photo Report] รายงาน PDF สำหรับ SIZE: {size}",
-                recipients=[recipient_email],
-                body=f"เรียนผู้เกี่ยวข้อง,\n\nระบบได้ทำการสร้างรายงาน Photo Report สำหรับ SIZE: {size} เรียบร้อยแล้ว รายละเอียดตามไฟล์แนบครับ\n\nสร้างเมื่อ: {timestamp_str}"
-            )
-            
-            with app.open_resource(pdf_path) as fp:
-                msg.attach(filename, "application/pdf", fp.read())
-
-            mail.send(msg)
-            email_status = f"📧 ส่งอีเมลไปยัง {recipient_email} สำเร็จแล้ว"
-        except Exception as mail_err:
-            app.logger.error(f"Mail sending failed: {str(mail_err)}")
-            email_status = f"⚠️ ไม่สามารถส่งอีเมลได้ ({str(mail_err)})"
-
         return f"""
 <!DOCTYPE html>
 <html lang="th">
@@ -134,7 +102,6 @@ def create_pdf():
     <div style="max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
         <h2 style="color: #16a34a; margin-top: 0;">✅ สร้าง PDF สำเร็จ</h2>
         <p style="color: #475569;">ชื่อไฟล์: <strong>{filename}</strong></p>
-        <p style="color: #2563eb; font-weight: bold;">{email_status}</p>
         <br>
         <a href="/download/{filename}">
             <button
