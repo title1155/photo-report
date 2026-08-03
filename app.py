@@ -7,13 +7,13 @@ from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
 
-# --- ตั้งค่า SMTP สำหรับ Hotmail / Outlook / Office365 ---
-app.config['MAIL_SERVER'] = 'smtp.office365.com'
+# --- ตั้งค่า SMTP สำหรับ Gmail ---
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USE_SSL'] = False
-app.config['MAIL_USERNAME'] = os.environ.get('EMAIL_USER')
-app.config['MAIL_PASSWORD'] = os.environ.get('EMAIL_PASSWORD')
+app.config['MAIL_USERNAME'] = os.environ.get('EMAIL_USER')      # ptcuringfac1@gmail.com
+app.config['MAIL_PASSWORD'] = os.environ.get('EMAIL_PASSWORD')  # App Password 16 หลัก
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('EMAIL_USER')
 
 mail = Mail(app)
@@ -33,8 +33,8 @@ def create_pdf():
         raw_size = request.form.get("size", "REPORT")
         size = secure_filename(raw_size) or "REPORT"
 
-        # ผู้รับคือ EMAIL_USER (ptcuringfac1@hotmail.com)
-        recipient_email = os.environ.get('EMAIL_USER', 'ptcuringfac1@hotmail.com')
+        # ระบุอีเมลปลายทางผู้รับเป็น Hotmail
+        recipient_email = "ptcuringfac1@hotmail.com"
 
         files = request.files.getlist("photos")
 
@@ -104,7 +104,7 @@ def create_pdf():
                 append_images=pages[1:]
             )
 
-        # ส่งอีเมลหาตัวเอง (ptcuringfac1@hotmail.com)
+        # ส่งอีเมลจาก Gmail ไปยัง ptcuringfac1@hotmail.com
         try:
             msg = Message(
                 subject=f"[Photo Report] รายงาน PDF สำหรับ SIZE: {size}",
