@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageDraw, ImageFont
 
@@ -38,10 +38,9 @@ def create_pdf():
         img_count = 0
         timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        # --- ฟังก์ชันวาดหัวกระดาษ (ปรับระบบโหลดฟอนต์สำหรับ Linux/Render) ---
         def draw_header(canvas_img, text_to_draw):
             draw_ctx = ImageDraw.Draw(canvas_img)
-            font_size = 120  # ขนาดตัวอักษรหัวกระดาษ ใหญ่ชัดเจน
+            font_size = 120
 
             font = None
             font_paths = [
@@ -69,7 +68,6 @@ def create_pdf():
 
         draw_header(current_canvas, size)
 
-        # โหลดฟอนต์ขนาดเล็กสำหรับใส่เลเบลบนรูปภาพ
         label_font = None
         label_font_paths = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -92,7 +90,6 @@ def create_pdf():
                 label_text = f"#{i+1} | {timestamp_str}"
                 w, h = img.size
 
-                # วาดพื้นหลังแถบสีดำและตัวอักษรมุมขวาล่างรูป
                 draw.rectangle([(w - 450, h - 60), (w, h)], fill=(0, 0, 0))
                 if label_font:
                     draw.text((w - 430, h - 50), label_text, fill=(255, 255, 255), font=label_font)
@@ -124,7 +121,17 @@ def create_pdf():
                 append_images=pages[1:]
             )
 
-        return f"""
+        # เปลี่ยนไปหน้าผลลัพธ์ผ่าน GET เพื่อป้องกัน LINE Browser ทำงานผิดพลาด
+        return redirect(url_for("result", filename=filename))
+
+    except Exception as e:
+        app.logger.error(f"Error creating PDF: {str(e)}")
+        return f"เกิดข้อผิดพลาดภายในระบบ: {e}", 500
+
+
+@app.route("/result/<filename>")
+def result(filename):
+    return f"""
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -161,10 +168,6 @@ def create_pdf():
 </body>
 </html>
 """
-
-    except Exception as e:
-        app.logger.error(f"Error creating PDF: {str(e)}")
-        return f"เกิดข้อผิดพลาดภายในระบบ: {e}", 500
 
 
 @app.route("/download/<filename>")
