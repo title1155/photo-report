@@ -38,20 +38,50 @@ def create_pdf():
         img_count = 0
         timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+        # --- ฟังก์ชันวาดหัวกระดาษ (ปรับระบบโหลดฟอนต์สำหรับ Linux/Render) ---
         def draw_header(canvas_img, text_to_draw):
             draw_ctx = ImageDraw.Draw(canvas_img)
-            try:
-                font = ImageFont.truetype("arial.ttf", 70)
-            except IOError:
+            font_size = 120  # ขนาดตัวอักษรหัวกระดาษ ใหญ่ชัดเจน
+
+            font = None
+            font_paths = [
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "arial.ttf"
+            ]
+
+            for path in font_paths:
+                try:
+                    font = ImageFont.truetype(path, font_size)
+                    break
+                except IOError:
+                    continue
+
+            if font is None:
                 font = ImageFont.load_default()
-            
+
             header_text = f"SIZE : {text_to_draw}"
             bbox = draw_ctx.textbbox((0, 0), header_text, font=font)
             text_width = bbox[2] - bbox[0]
             x_pos = (2480 - text_width) // 2
-            draw_ctx.text((x_pos, 60), header_text, fill=(0, 0, 0), font=font)
+            draw_ctx.text((x_pos, 45), header_text, fill=(0, 0, 0), font=font)
 
         draw_header(current_canvas, size)
+
+        # โหลดฟอนต์ขนาดเล็กสำหรับใส่เลเบลบนรูปภาพ
+        label_font = None
+        label_font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "arial.ttf"
+        ]
+        for path in label_font_paths:
+            try:
+                label_font = ImageFont.truetype(path, 36)
+                break
+            except IOError:
+                continue
 
         for i, file in enumerate(files):
             with Image.open(file) as raw_img:
@@ -61,8 +91,13 @@ def create_pdf():
                 draw = ImageDraw.Draw(img)
                 label_text = f"#{i+1} | {timestamp_str}"
                 w, h = img.size
-                draw.rectangle([(w - 350, h - 50), (w, h)], fill=(0, 0, 0))
-                draw.text((w - 340, h - 40), label_text, fill=(255, 255, 255))
+
+                # วาดพื้นหลังแถบสีดำและตัวอักษรมุมขวาล่างรูป
+                draw.rectangle([(w - 450, h - 60), (w, h)], fill=(0, 0, 0))
+                if label_font:
+                    draw.text((w - 430, h - 50), label_text, fill=(255, 255, 255), font=label_font)
+                else:
+                    draw.text((w - 340, h - 40), label_text, fill=(255, 255, 255))
 
                 pos_idx = img_count % 4
                 current_canvas.paste(img, positions[pos_idx])
@@ -97,23 +132,26 @@ def create_pdf():
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Photo Report</title>
 </head>
-<body style="font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f8fafc;">
+<body style="font-family: Arial, sans-serif; text-align: center; margin-top: 40px; background-color: #f8fafc; padding: 20px;">
 
-    <div style="max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-        <h2 style="color: #16a34a; margin-top: 0;">✅ สร้าง PDF สำเร็จ</h2>
-        <p style="color: #475569;">ชื่อไฟล์: <strong>{filename}</strong></p>
+    <div style="max-width: 650px; margin: 0 auto; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
+        <h1 style="color: #16a34a; margin-top: 0; font-size: 32px;">✅ สร้าง PDF สำเร็จ</h1>
+        <p style="color: #475569; font-size: 22px; margin: 20px 0;">ชื่อไฟล์: <strong style="color: #0f172a;">{filename}</strong></p>
         <br>
-        <a href="/download/{filename}">
+        <a href="/download/{filename}" style="text-decoration: none;">
             <button
                 style="
-                    font-size: 18px;
-                    padding: 12px 28px;
+                    font-size: 22px;
+                    padding: 16px 36px;
                     background: #2563eb;
                     color: white;
                     border: none;
-                    border-radius: 8px;
+                    border-radius: 12px;
                     cursor: pointer;
                     font-weight: bold;
+                    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+                    width: 100%;
+                    max-width: 400px;
                 ">
                 📥 ดาวน์โหลด PDF
             </button>
@@ -137,18 +175,16 @@ def download(filename):
     if not os.path.exists(pdf_path):
         return "ไม่พบไฟล์ที่ต้องการดาวน์โหลด", 404
 
-    # ส่งไฟล์และกำหนด Header สำหรับรองรับทั้ง Android และ iOS Safari
     response = send_file(
         pdf_path,
         mimetype="application/pdf",
         as_attachment=True,
         download_name=safe_filename
     )
-    
-    # เพิ่ม Header บังคับเพื่อป้องกัน Safari บน iOS บล็อกดาวน์โหลด
+
     response.headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
     response.headers["Content-Type"] = "application/pdf"
-    
+
     return response
 
 
