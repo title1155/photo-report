@@ -137,12 +137,19 @@ def download(filename):
     if not os.path.exists(pdf_path):
         return "ไม่พบไฟล์ที่ต้องการดาวน์โหลด", 404
 
-    return send_file(
+    # ส่งไฟล์และกำหนด Header สำหรับรองรับทั้ง Android และ iOS Safari
+    response = send_file(
         pdf_path,
         mimetype="application/pdf",
         as_attachment=True,
         download_name=safe_filename
     )
+    
+    # เพิ่ม Header บังคับเพื่อป้องกัน Safari บน iOS บล็อกดาวน์โหลด
+    response.headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+    response.headers["Content-Type"] = "application/pdf"
+    
+    return response
 
 
 if __name__ == "__main__":
