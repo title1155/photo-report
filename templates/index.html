@@ -1,14 +1,25 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Photo Report</title>
 </head>
 <body>
 
     <h1>Photo Report</h1>
 
-    <form action="/create" method="post" enctype="multipart/form-data">
+    <form action="/create" method="POST" enctype="multipart/form-data">
+
+        <label>SIZE :</label>
+        <input
+            type="text"
+            name="size"
+            placeholder="8357"
+            pattern="[0-9]{4}"
+            required>
+
+        <br><br>
 
         <input
             type="file"
