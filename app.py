@@ -3,13 +3,72 @@ from datetime import datetime
 from flask import Flask, render_template, request, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
 from PIL import Image, ImageDraw, ImageFont
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 
 app = Flask(__name__)
+
+# จำกัดขนาดไฟล์อัปโหลดรวมไม่เกิน 64MB
+app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024
 
 OUTPUT_DIR = "generated"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+# ==========================================
+# ⚙️ ตั้งค่า Brevo API
+# ==========================================
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+SENDER_EMAIL = "godtitle@gmail.com"
+SENDER_NAME = "Photo Report System"
 
+configuration = sib_api_v3_sdk.Configuration()
+configuration.api_key['api-key'] = BREVO_API_KEY
+
+def send_pdf_email(receiver_email, filename, pdf_url):
+    """ฟังก์ชันสำหรับส่งอีเมลแจ้งเตือนพร้อมลิงก์ดาวน์โหลด PDF ผ่าน Brevo"""
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+    
+    sender = {"name": SENDER_NAME, "email": SENDER_EMAIL}
+    to = [{"email": receiver_email}]
+    subject = f"📄 รายงาน PDF ของคุณพร้อมแล้ว: {filename}"
+
+    html_content = f"""
+    <html>
+      <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8fafc;">
+        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; border: 1px solid #e2e8f0;">
+            <h2 style="color: #16a34a; margin-top: 0;">✅ สร้างไฟล์ PDF สำเร็จแล้ว</h2>
+            <p style="font-size: 16px; color: #334155;">ชื่อไฟล์: <strong>{filename}</strong></p>
+            <p style="font-size: 16px; color: #334155;">คุณสามารถกดเปิดดูหรือดาวน์โหลดไฟล์ได้ที่ปุ่มด้านล่างนี้:</p>
+            <br>
+            <div style="text-align: center;">
+                <a href="{pdf_url}" style="padding: 14px 28px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; display: inline-block;">
+                    📥 เปิดดู / ดาวน์โหลด PDF
+                </a>
+            </div>
+            <br>
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin-top: 30px;">
+            <p style="font-size: 12px; color: #94a3b8; text-align: center;">อีเมลนี้ส่งอัตโนมัติจากระบบ Photo Report</p>
+        </div>
+      </body>
+    </html>
+    """
+
+    send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+        to=to, sender=sender, subject=subject, html_content=html_content
+    )
+
+    try:
+        api_response = api_instance.send_transac_email(send_smtp_email)
+        print("ส่งอีเมลสำเร็จ:", api_response)
+        return True
+    except ApiException as e:
+        print("เกิดข้อผิดพลาดในการส่งอีเมล:", e)
+        return False
+
+
+# ==========================================
+# 🌐 Routes
+# ==========================================
 @app.route("/")
 def home():
     return render_template("index.html")
@@ -20,6 +79,9 @@ def create_pdf():
     try:
         raw_size = request.form.get("size", "REPORT")
         size = secure_filename(raw_size) or "REPORT"
+        
+        # รับอีเมลผู้รับจากฟอร์ม (ถ้าไม่ระบุจะไม่ส่งอีเมล)
+        receiver_email = request.form.get("email", "").strip()
 
         files = request.files.getlist("photos")
 
@@ -121,8 +183,16 @@ def create_pdf():
                 append_images=pages[1:]
             )
 
-        # เปลี่ยนไปหน้าผลลัพธ์ผ่าน GET เพื่อป้องกัน LINE Browser ทำงานผิดพลาด
-        return redirect(url_for("result", filename=filename))
+        # หากมีการระบุอีเมลผู้รับ ให้ทำการส่งอีเมลผ่าน Brevo
+        email_sent_status = "ไม่ได้ระบุอีเมลผู้รับ"
+        if receiver_email:
+            file_url = url_for("download", filename=filename, _external=True)
+            if send_pdf_email(receiver_email, filename, file_url):
+                email_sent_status = f"ส่งอีเมลสำเร็จไปยัง {receiver_email}"
+            else:
+                email_sent_status = "เกิดข้อผิดพลาดในการส่งอีเมล"
+
+        return redirect(url_for("result", filename=filename, status=email_sent_status))
 
     except Exception as e:
         app.logger.error(f"Error creating PDF: {str(e)}")
@@ -131,6 +201,8 @@ def create_pdf():
 
 @app.route("/result/<filename>")
 def result(filename):
+    status = request.args.get("status", "")
+    file_url = url_for("download", filename=filename, _external=True)
     return f"""
 <!DOCTYPE html>
 <html lang="th">
@@ -143,8 +215,10 @@ def result(filename):
 
     <div style="max-width: 650px; margin: 0 auto; background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1);">
         <h1 style="color: #16a34a; margin-top: 0; font-size: 32px;">✅ สร้าง PDF สำเร็จ</h1>
-        <p style="color: #475569; font-size: 22px; margin: 20px 0;">ชื่อไฟล์: <strong style="color: #0f172a;">{filename}</strong></p>
+        <p style="color: #475569; font-size: 20px; margin: 15px 0;">ชื่อไฟล์: <strong style="color: #0f172a;">{filename}</strong></p>
+        <p style="color: #2563eb; font-size: 16px; font-weight: bold; background: #eff6ff; padding: 10px; border-radius: 8px;">📬 สถานะอีเมล: {status}</p>
         <br>
+        
         <a href="/download/{filename}" style="text-decoration: none;">
             <button
                 style="
@@ -159,11 +233,47 @@ def result(filename):
                     box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
                     width: 100%;
                     max-width: 400px;
+                    margin-bottom: 15px;
                 ">
-                📥 ดาวน์โหลด PDF
+                👁️ เปิดดู / แชร์ไฟล์ PDF
             </button>
         </a>
+
+        <br>
+
+        <button
+            onclick="shareLink('{file_url}')"
+            style="
+                font-size: 20px;
+                padding: 14px 30px;
+                background: #059669;
+                color: white;
+                border: none;
+                border-radius: 12px;
+                cursor: pointer;
+                font-weight: bold;
+                box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+                width: 100%;
+                max-width: 400px;
+            ">
+            🔗 ส่งลิงก์ PDF เข้า LINE / แอปอื่น
+        </button>
     </div>
+
+    <script>
+    function shareLink(url) {{
+        if (navigator.share) {{
+            navigator.share({{
+                title: 'Photo Report PDF',
+                text: 'ไฟล์เอกสาร PDF: {filename}',
+                url: url
+            }}).catch(console.error);
+        }} else {{
+            navigator.clipboard.writeText(url);
+            alert('คัดลอกลิงก์ดาวน์โหลดเรียบร้อยแล้ว!');
+        }}
+    }}
+    </script>
 
 </body>
 </html>
@@ -181,11 +291,11 @@ def download(filename):
     response = send_file(
         pdf_path,
         mimetype="application/pdf",
-        as_attachment=True,
+        as_attachment=False,
         download_name=safe_filename
     )
 
-    response.headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+    response.headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
     response.headers["Content-Type"] = "application/pdf"
 
     return response
