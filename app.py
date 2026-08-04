@@ -1,3 +1,4 @@
+import base64
 import os
 from datetime import datetime
 from flask import Flask, render_template, request, send_file, redirect, url_for
@@ -18,20 +19,23 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # ⚙️ ตั้งค่า Brevo API & อีเมล
 # ==========================================
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
-SENDER_EMAIL = "godtitle@gmail.com"  # อีเมลผู้ส่ง (สมัครไว้กับ Brevo)
+SENDER_EMAIL = "godtitle@gmail.com"  # อีเมลที่สมัครใช้งาน Brevo
 SENDER_NAME = "Photo Report System"
 
-# 🎯 อีเมลปลายทางผู้รับประจำ (ไม่ต้องกรอกในหน้าเว็บ)
-RECEIVER_EMAIL = "godtitle@gmail.com"  # 👈 เปลี่ยนเป็นอีเมลปลายทางที่ต้องการ
+# 🎯 อีเมลผู้รับปลายทาง
+RECEIVER_EMAIL = "ptcuringfac1@hotmail.com"
 
 configuration = sib_api_v3_sdk.Configuration()
 if BREVO_API_KEY:
     configuration.api_key['api-key'] = BREVO_API_KEY
 
-def send_pdf_email(receiver_email, filename, pdf_url):
-    """ฟังก์ชันสำหรับส่งอีเมลแจ้งเตือนพร้อมลิงก์ดาวน์โหลด PDF ผ่าน Brevo"""
-    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
-    
+
+def send_pdf_email(receiver_email, filename, pdf_path, pdf_url):
+    """ฟังก์ชันส่งอีเมลพร้อมแนบไฟล์ PDF (Attachment) ผ่าน Brevo API"""
+    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+        sib_api_v3_sdk.ApiClient(configuration)
+    )
+
     sender = {"name": SENDER_NAME, "email": SENDER_EMAIL}
     to = [{"email": receiver_email}]
     subject = f"📄 รายงาน PDF ของคุณพร้อมแล้ว: {filename}"
@@ -42,11 +46,11 @@ def send_pdf_email(receiver_email, filename, pdf_url):
         <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; border: 1px solid #e2e8f0;">
             <h2 style="color: #16a34a; margin-top: 0;">✅ สร้างไฟล์ PDF สำเร็จแล้ว</h2>
             <p style="font-size: 16px; color: #334155;">ชื่อไฟล์: <strong>{filename}</strong></p>
-            <p style="font-size: 16px; color: #334155;">คุณสามารถกดเปิดดูหรือดาวน์โหลดไฟล์ได้ที่ปุ่มด้านล่างนี้:</p>
+            <p style="font-size: 16px; color: #334155;">ระบบได้แนบไฟล์ PDF มากับอีเมลฉบับนี้เรียบร้อยแล้วครับ คุณสามารถเปิดดูหรือดาวน์โหลดได้จากไฟล์แนบด้านล่าง</p>
             <br>
             <div style="text-align: center;">
-                <a href="{pdf_url}" style="padding: 14px 28px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 18px; display: inline-block;">
-                    📥 เปิดดู / ดาวน์โหลด PDF
+                <a href="{pdf_url}" style="padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                    🌐 หรือกดดูผ่านเว็บไซต์
                 </a>
             </div>
             <br>
@@ -57,8 +61,22 @@ def send_pdf_email(receiver_email, filename, pdf_url):
     </html>
     """
 
+    # อ่านไฟล์ PDF แล้วแปลงเป็น base64 เพื่อแนบเป็น Attachment
+    attachment_list = []
+    if os.path.exists(pdf_path):
+        with open(pdf_path, "rb") as f:
+            encoded_file = base64.b64encode(f.read()).decode("utf-8")
+
+        attachment_list.append(
+            {"content": encoded_file, "name": filename}
+        )
+
     send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
-        to=to, sender=sender, subject=subject, html_content=html_content
+        to=to,
+        sender=sender,
+        subject=subject,
+        html_content=html_content,
+        attachment=attachment_list,  # แนบไฟล์ PDF เข้าไปตรงนี้
     )
 
     try:
@@ -89,12 +107,7 @@ def create_pdf():
         if not files or files[0].filename == "":
             return "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป", 400
 
-        positions = [
-            (40, 180),
-            (1280, 180),
-            (40, 1840),
-            (1280, 1840)
-        ]
+        positions = [(40, 180), (1280, 180), (40, 1840), (1280, 1840)]
 
         pages = []
         current_canvas = Image.new("RGB", (2480, 3508), "white")
@@ -110,7 +123,7 @@ def create_pdf():
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-                "arial.ttf"
+                "arial.ttf",
             ]
 
             for path in font_paths:
@@ -135,7 +148,7 @@ def create_pdf():
         label_font_paths = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "arial.ttf"
+            "arial.ttf",
         ]
         for path in label_font_paths:
             try:
@@ -155,9 +168,16 @@ def create_pdf():
 
                 draw.rectangle([(w - 450, h - 60), (w, h)], fill=(0, 0, 0))
                 if label_font:
-                    draw.text((w - 430, h - 50), label_text, fill=(255, 255, 255), font=label_font)
+                    draw.text(
+                        (w - 430, h - 50),
+                        label_text,
+                        fill=(255, 255, 255),
+                        font=label_font,
+                    )
                 else:
-                    draw.text((w - 340, h - 40), label_text, fill=(255, 255, 255))
+                    draw.text(
+                        (w - 340, h - 40), label_text, fill=(255, 255, 255)
+                    )
 
                 pos_idx = img_count % 4
                 current_canvas.paste(img, positions[pos_idx])
@@ -181,19 +201,21 @@ def create_pdf():
                 "PDF",
                 resolution=300.0,
                 save_all=True,
-                append_images=pages[1:]
+                append_images=pages[1:],
             )
 
-        # ส่งอีเมลอัตโนมัติไปยัง RECEIVER_EMAIL
+        # ส่งอีเมลอัตโนมัติพร้อมแนบไฟล์ PDF
         email_sent_status = "ไม่ได้ส่งอีเมล"
         if RECEIVER_EMAIL:
             file_url = url_for("download", filename=filename, _external=True)
-            if send_pdf_email(RECEIVER_EMAIL, filename, file_url):
+            if send_pdf_email(RECEIVER_EMAIL, filename, pdf_path, file_url):
                 email_sent_status = f"ส่งอีเมลสำเร็จไปยัง {RECEIVER_EMAIL}"
             else:
                 email_sent_status = "เกิดข้อผิดพลาดในการส่งอีเมล"
 
-        return redirect(url_for("result", filename=filename, status=email_sent_status))
+        return redirect(
+            url_for("result", filename=filename, status=email_sent_status)
+        )
 
     except Exception as e:
         app.logger.error(f"Error creating PDF: {str(e)}")
@@ -293,10 +315,12 @@ def download(filename):
         pdf_path,
         mimetype="application/pdf",
         as_attachment=False,
-        download_name=safe_filename
+        download_name=safe_filename,
     )
 
-    response.headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
+    response.headers["Content-Disposition"] = (
+        f'inline; filename="{safe_filename}"'
+    )
     response.headers["Content-Type"] = "application/pdf"
 
     return response
