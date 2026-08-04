@@ -1,40 +1,28 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Photo Report</title>
-</head>
-<body>
+<!-- ตัวอย่างส่วนฟอร์มใน index.html -->
+<form action="/create" method="POST" enctype="multipart/form-data">
+    
+    <!-- ช่องใส่ Size เดิม -->
+    <label for="size">Size / ชื่อรายงาน:</label>
+    <input type="text" id="size" name="size" placeholder="เช่น 8123" required>
 
-    <h1>Photo Report</h1>
+    <br><br>
 
-    <form action="/create" method="POST" enctype="multipart/form-data">
+    <!-- ➕ เพิ่มช่องเลือก Result -->
+    <label for="result">ผลการตรวจ (Result):</label>
+    <select id="result" name="result" style="font-size: 16px; padding: 8px; border-radius: 6px;">
+        <option value="RC OK">1. RC OK</option>
+        <option value="RC NG">2. RC NG</option>
+        <option value="Mold NG">3. Mold NG</option>
+        <option value="Test">4. Test</option>
+    </select>
 
-        <label>SIZE :</label>
-        <input
-            type="text"
-            name="size"
-            placeholder="8357"
-            pattern="[0-9]{4}"
-            required>
+    <br><br>
 
-        <br><br>
+    <!-- ช่องอัปโหลดรูปภาพ -->
+    <label for="photos">เลือกรูปภาพ:</label>
+    <input type="file" id="photos" name="photos" multiple accept="image/*" required>
 
-        <input
-            type="file"
-            name="photos"
-            multiple
-            accept="image/*"
-            required>
+    <br><br>
 
-        <br><br>
-
-        <button type="submit">
-            สร้าง PDF
-        </button>
-
-    </form>
-
-</body>
-</html>
+    <button type="submit">สร้าง PDF และส่งอีเมล</button>
+</form>
