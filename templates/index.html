@@ -1,13 +1,11 @@
-<!-- ตัวอย่างส่วนฟอร์มใน index.html -->
 <form action="/create" method="POST" enctype="multipart/form-data">
     
-    <!-- ช่องใส่ Size เดิม -->
     <label for="size">Size / ชื่อรายงาน:</label>
-    <input type="text" id="size" name="size" placeholder="เช่น 8123" required>
+    <input type="text" id="size" name="size" placeholder="เช่น 1234" required>
 
     <br><br>
 
-    <!-- ➕ เพิ่มช่องเลือก Result -->
+    <!-- ช่องเลือก Result -->
     <label for="result">ผลการตรวจ (Result):</label>
     <select id="result" name="result" style="font-size: 16px; padding: 8px; border-radius: 6px;">
         <option value="RC OK">1. RC OK</option>
@@ -18,7 +16,6 @@
 
     <br><br>
 
-    <!-- ช่องอัปโหลดรูปภาพ -->
     <label for="photos">เลือกรูปภาพ:</label>
     <input type="file" id="photos" name="photos" multiple accept="image/*" required>
 

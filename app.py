@@ -3,9 +3,9 @@ import os
 from datetime import datetime
 from flask import Flask, render_template, request, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
-from PIL import Image, ImageDraw, ImageFont
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
+from PIL import Image, ImageDraw, ImageFont
 
 app = Flask(__name__)
 
@@ -61,22 +61,19 @@ def send_pdf_email(receiver_email, filename, pdf_path, pdf_url):
     </html>
     """
 
-    # อ่านไฟล์ PDF แล้วแปลงเป็น base64 เพื่อแนบเป็น Attachment
     attachment_list = []
     if os.path.exists(pdf_path):
         with open(pdf_path, "rb") as f:
             encoded_file = base64.b64encode(f.read()).decode("utf-8")
 
-        attachment_list.append(
-            {"content": encoded_file, "name": filename}
-        )
+        attachment_list.append({"content": encoded_file, "name": filename})
 
     send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
         to=to,
         sender=sender,
         subject=subject,
         html_content=html_content,
-        attachment=attachment_list,  # แนบไฟล์ PDF เข้าไปตรงนี้
+        attachment=attachment_list,
     )
 
     try:
@@ -99,8 +96,11 @@ def home():
 @app.route("/create", methods=["POST"])
 def create_pdf():
     try:
-        raw_size = request.form.get("size", "REPORT")
+        raw_size = request.form.get("size", "REPORT").strip()
         size = secure_filename(raw_size) or "REPORT"
+
+        # 📌 รับค่า Result จากฟอร์ม
+        result_val = request.form.get("result", "RC OK").strip()
 
         files = request.files.getlist("photos")
 
@@ -112,11 +112,15 @@ def create_pdf():
         pages = []
         current_canvas = Image.new("RGB", (2480, 3508), "white")
         img_count = 0
-        timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        now = datetime.now()
+        timestamp_str = now.strftime("%Y-%m-%d %H:%M")
+
+        # ข้อความ Header บนหัวกระดาษ (แสดงทั้ง Size และ Result)
+        header_title = f"{size} [{result_val}]"
 
         def draw_header(canvas_img, text_to_draw):
             draw_ctx = ImageDraw.Draw(canvas_img)
-            font_size = 120
+            font_size = 110
 
             font = None
             font_paths = [
@@ -142,7 +146,7 @@ def create_pdf():
             x_pos = (2480 - text_width) // 2
             draw_ctx.text((x_pos, 45), header_text, fill=(0, 0, 0), font=font)
 
-        draw_header(current_canvas, size)
+        draw_header(current_canvas, header_title)
 
         label_font = None
         label_font_paths = [
@@ -186,13 +190,17 @@ def create_pdf():
                 if img_count % 4 == 0:
                     pages.append(current_canvas)
                     current_canvas = Image.new("RGB", (2480, 3508), "white")
-                    draw_header(current_canvas, size)
+                    draw_header(current_canvas, header_title)
 
         if img_count % 4 != 0:
             pages.append(current_canvas)
 
-        today = datetime.now().strftime("%Y%m%d")
-        filename = f"{size}_{today}.pdf"
+        # 📌 จัดรูปแบบวันที่: วันที่ + เดือนย่อ + ปี 4 หลัก (เช่น 4Aug2026)
+        day_str = str(now.day)
+        date_str = f"{day_str}{now.strftime('%b%Y')}"  # %Y จะได้ปี 4 หลัก เช่น 2026
+
+        # 📌 ตั้งชื่อไฟล์ตามรูปแบบ: 1234 RC NG 4Aug2026.pdf
+        filename = f"{size} {result_val} {date_str}.pdf"
         pdf_path = os.path.join(OUTPUT_DIR, filename)
 
         if pages:
@@ -305,7 +313,7 @@ def result(filename):
 
 @app.route("/download/<filename>")
 def download(filename):
-    safe_filename = secure_filename(filename)
+    safe_filename = filename
     pdf_path = os.path.join(OUTPUT_DIR, safe_filename)
 
     if not os.path.exists(pdf_path):
