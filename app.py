@@ -38,7 +38,7 @@ def send_pdf_email(receiver_email, filename, pdf_path, pdf_url):
 
     sender = {"name": SENDER_NAME, "email": SENDER_EMAIL}
     to = [{"email": receiver_email}]
-    subject = f"📄 รายงาน PDF ของคุณพร้อมแล้ว: {filename}"
+    subject = f"📄 PDF : {filename}"
 
     html_content = f"""
     <html>
