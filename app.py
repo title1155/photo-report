@@ -15,14 +15,18 @@ OUTPUT_DIR = "generated"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # ==========================================
-# ⚙️ ตั้งค่า Brevo API
+# ⚙️ ตั้งค่า Brevo API & อีเมล
 # ==========================================
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
-SENDER_EMAIL = "godtitle@gmail.com"
+SENDER_EMAIL = "godtitle@gmail.com"  # อีเมลผู้ส่ง (สมัครไว้กับ Brevo)
 SENDER_NAME = "Photo Report System"
 
+# 🎯 อีเมลปลายทางผู้รับประจำ (ไม่ต้องกรอกในหน้าเว็บ)
+RECEIVER_EMAIL = "godtitle@gmail.com"  # 👈 เปลี่ยนเป็นอีเมลปลายทางที่ต้องการ
+
 configuration = sib_api_v3_sdk.Configuration()
-configuration.api_key['api-key'] = BREVO_API_KEY
+if BREVO_API_KEY:
+    configuration.api_key['api-key'] = BREVO_API_KEY
 
 def send_pdf_email(receiver_email, filename, pdf_url):
     """ฟังก์ชันสำหรับส่งอีเมลแจ้งเตือนพร้อมลิงก์ดาวน์โหลด PDF ผ่าน Brevo"""
@@ -79,9 +83,6 @@ def create_pdf():
     try:
         raw_size = request.form.get("size", "REPORT")
         size = secure_filename(raw_size) or "REPORT"
-        
-        # รับอีเมลผู้รับจากฟอร์ม (ถ้าไม่ระบุจะไม่ส่งอีเมล)
-        receiver_email = request.form.get("email", "").strip()
 
         files = request.files.getlist("photos")
 
@@ -183,12 +184,12 @@ def create_pdf():
                 append_images=pages[1:]
             )
 
-        # หากมีการระบุอีเมลผู้รับ ให้ทำการส่งอีเมลผ่าน Brevo
-        email_sent_status = "ไม่ได้ระบุอีเมลผู้รับ"
-        if receiver_email:
+        # ส่งอีเมลอัตโนมัติไปยัง RECEIVER_EMAIL
+        email_sent_status = "ไม่ได้ส่งอีเมล"
+        if RECEIVER_EMAIL:
             file_url = url_for("download", filename=filename, _external=True)
-            if send_pdf_email(receiver_email, filename, file_url):
-                email_sent_status = f"ส่งอีเมลสำเร็จไปยัง {receiver_email}"
+            if send_pdf_email(RECEIVER_EMAIL, filename, file_url):
+                email_sent_status = f"ส่งอีเมลสำเร็จไปยัง {RECEIVER_EMAIL}"
             else:
                 email_sent_status = "เกิดข้อผิดพลาดในการส่งอีเมล"
 
