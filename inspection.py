@@ -1,139 +1,187 @@
-import io
-from concurrent.futures import ThreadPoolExecutor
-from PIL import Image, ImageOps
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
+import base64
+import os
+import threading
+from datetime import datetime
+from flask import redirect, url_for
+from PIL import Image, ImageDraw, ImageFont
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 
-# ฟังก์ชันย่อรูปภาพใน Memory เพื่อเพิ่มความเร็วอย่างก้าวกระโดด
-def process_and_compress_image(photo_file, max_size=(800, 800), quality=75):
-    """
-    อ่านไฟล์รูป ปรับ Orientation ตาม EXIF ปรับขนาด ไม่ให้เกิน max_size 
-    และบีบอัดคุณภาพลงเหลือ quality% ใน RAM (BytesIO)
-    """
-    img = Image.open(photo_file)
-    
-    # หมุนภาพให้ตรงตามค่า EXIF ของกล้องมือถือ
-    img = ImageOps.exif_transpose(img)
-    
-    # แปลงเป็น RGB หากเป็น RGBA หรือไฟล์ชนิดอื่น
-    if img.mode in ("RGBA", "P"):
-        img = img.convert("RGB")
-        
-    # ย่อขนาดรูปภาพ (Thumbnail/Resize)
-    img.thumbnail(max_size, Image.Resampling.LANCZOS)
-    
-    # บันทึกเป็น BytesIO ใน RAM
-    img_io = io.BytesIO()
-    img.save(img_io, format='JPEG', quality=quality, optimize=True)
-    img_io.seek(0)
-    return img_io
+OUTPUT_DIR = "generated"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-def generate_inspection_pdf(machine_no, unit, photos, output_stream):
-    """
-    สร้าง PDF Inspection Report แบบรวดเร็ว
-    - machine_no: เลขเครื่อง
-    - unit: Unit
-    - photos: List ของไฟล์รูปภาพที่อัปโหลดเข้ามา
-    - output_stream: Stream/Path สำหรับเซฟ PDF
-    """
-    # 1. ใช้ Multi-threading เพื่อย่อและบีบอัดรูปภาพ 14 รูปพร้อมๆ กัน
-    with ThreadPoolExecutor() as executor:
-        compressed_photos = list(executor.map(process_and_compress_image, photos))
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+SENDER_EMAIL = "godtitle@gmail.com"
+SENDER_NAME = "Photo Report System"
+RECEIVER_EMAIL = "ptcuringfac1@hotmail.com"
 
-    # 2. ตั้งค่า Document (ระยะขอบ)
-    doc = SimpleDocTemplate(
-        output_stream,
-        pagesize=A4,
-        rightMargin=20,
-        leftMargin=20,
-        topMargin=20,
-        bottomMargin=20
-    )
+configuration = sib_api_v3_sdk.Configuration()
+if BREVO_API_KEY:
+    configuration.api_key['api-key'] = BREVO_API_KEY
 
-    styles = getSampleStyleSheet()
-    
-    # Style สำหรับหัวข้อและข้อความ
-    title_style = ParagraphStyle(
-        'TitleStyle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        leading=22,
-        textColor=colors.HexColor('#059669'),
-        alignment=1, # Center
-        spaceAfter=10
-    )
-    
-    info_style = ParagraphStyle(
-        'InfoStyle',
-        parent=styles['Normal'],
-        fontSize=12,
-        leading=16,
-        textColor=colors.HexColor('#1e293b')
-    )
 
-    story = []
+def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
+    """ส่งอีเมลเบื้องหลัง (Background Thread) หน้าเว็บจะตอบสนองทันที"""
+    def send_task():
+        try:
+            api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+                sib_api_v3_sdk.ApiClient(configuration)
+            )
+            sender = {"name": SENDER_NAME, "email": SENDER_EMAIL}
+            to = [{"email": receiver_email}]
+            subject = f"📄 รายงาน Inspection PDF: {filename}"
 
-    # หัวข้อรายงาน
-    story.append(Paragraph("<b>INSPECTION REPORT</b>", title_style))
-    story.append(Spacer(1, 10))
+            html_content = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8fafc;">
+                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h2 style="color: #059669; margin-top: 0;">✅ สร้างไฟล์ Inspection PDF สำเร็จแล้ว</h2>
+                    <p style="font-size: 16px; color: #334155;">ชื่อไฟล์: <strong>{filename}</strong></p>
+                    <p style="font-size: 16px; color: #334155;">ระบบได้แนบไฟล์ PDF มากับอีเมลฉบับนี้เรียบร้อยแล้วครับ</p>
+                    <br>
+                    <div style="text-align: center;">
+                        <a href="{pdf_url}" style="padding: 12px 24px; background-color: #059669; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                            🌐 หรือกดดูผ่านเว็บไซต์
+                        </a>
+                    </div>
+                </div>
+              </body>
+            </html>
+            """
 
-    # ตารางแสดงข้อมูล Machine No. & Unit
-    info_data = [
-        [
-            Paragraph(f"<b>Machine No:</b> {machine_no}", info_style),
-            Paragraph(f"<b>Unit:</b> {unit}", info_style)
-        ]
-    ]
-    info_table = Table(info_data, colWidths=[270, 270])
-    info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f1f5f9')),
-        ('PADDING', (0, 0), (-1, -1), 8),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-    ]))
-    story.append(info_table)
-    story.append(Spacer(1, 15))
+            attachment_list = []
+            if os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    encoded_file = base64.b64encode(f.read()).decode("utf-8")
+                attachment_list.append(
+                    {"content": encoded_file, "name": filename}
+                )
 
-    # 3. จัดการวางรูปภาพเป็น Grid (2 คอลัมน์ต่อแถว)
-    grid_data = []
-    row = []
-    
-    # กำหนดขนาดรูปภาพใน PDF (กว้าง 260px, สูง 195px เพื่อให้อยู่ในหน้า A4 สวยงาม)
-    target_width = 260
-    target_height = 195
+            send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+                to=to,
+                sender=sender,
+                subject=subject,
+                html_content=html_content,
+                attachment=attachment_list,
+            )
 
-    for idx, img_bytes in enumerate(compressed_photos):
-        rl_img = RLImage(img_bytes, width=target_width, height=target_height)
-        
-        # ใส่รูปและป้ายกำกับลำดับรูป
-        cell_content = [
-            rl_img,
-            Paragraph(f"<font size=9 color='#64748b'>Photo #{idx+1}</font>", info_style)
-        ]
-        row.append(cell_content)
+            api_instance.send_transac_email(send_smtp_email)
+            print(f"Async email sent successfully for {filename}")
+        except ApiException as e:
+            print("Error sending email async:", e)
 
-        if len(row) == 2:
-            grid_data.append(row)
-            row = []
+    thread = threading.Thread(target=send_task)
+    thread.start()
 
-    # หากมีรูปเศษเหลือ 1 รูปในแถบสุดท้าย
-    if row:
-        row.append("") # ใส่ช่องว่างให้ครบ 2 คอลัมน์
-        grid_data.append(row)
 
-    # สร้าง Table สำหรับรูปภาพ
-    if grid_data:
-        photo_table = Table(grid_data, colWidths=[270, 270])
-        photo_table.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ]))
-        story.append(photo_table)
+def process_inspection(request):
+    try:
+        machine_no = request.form.get("machine_no", "").strip()
+        unit = request.form.get("unit", "").strip()
+        files = request.files.getlist("photos")
 
-    # 4. สร้างไฟล์ PDF
-    doc.build(story)
+        if not files or files[0].filename == "":
+            return "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป", 400
+
+        # ตำแหน่งวางรูป 4 รูปต่อหน้า
+        positions = [(40, 180), (1280, 180), (40, 1840), (1280, 1840)]
+        pages = []
+        current_canvas = Image.new("RGB", (2480, 3508), "white")
+        img_count = 0
+        now = datetime.now()
+        timestamp_str = now.strftime("%Y-%m-%d %H:%M")
+
+        header_title = f"MC: {machine_no} | UNIT: {unit}"
+
+        # ดึง Font ครั้งเดียวเพื่อลดภาระ RAM
+        font_path = None
+        for path in [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "arial.ttf",
+        ]:
+            if os.path.exists(path):
+                font_path = path
+                break
+
+        try:
+            header_font = (
+                ImageFont.truetype(font_path, 100)
+                if font_path
+                else ImageFont.load_default()
+            )
+            label_font = (
+                ImageFont.truetype(font_path, 36)
+                if font_path
+                else ImageFont.load_default()
+            )
+        except Exception:
+            header_font = label_font = ImageFont.load_default()
+
+        def draw_header(canvas_img, text_to_draw):
+            draw_ctx = ImageDraw.Draw(canvas_img)
+            bbox = draw_ctx.textbbox((0, 0), text_to_draw, font=header_font)
+            text_width = bbox[2] - bbox[0]
+            x_pos = (2480 - text_width) // 2
+            draw_ctx.text(
+                (x_pos, 45), text_to_draw, fill=(0, 0, 0), font=header_font
+            )
+
+        draw_header(current_canvas, header_title)
+
+        for i, file in enumerate(files):
+            with Image.open(file) as raw_img:
+                img = raw_img.convert("RGB")
+                # ใช้ Fast Resampling + LANCZOS เพื่อประมวลผลไวแต่รูปยังคมชัดกริบ
+                img.thumbnail((1160, 1600), Image.Resampling.LANCZOS)
+
+                draw = ImageDraw.Draw(img)
+                label_text = f"#{i+1} | {timestamp_str}"
+                w, h = img.size
+
+                draw.rectangle([(w - 450, h - 60), (w, h)], fill=(0, 0, 0))
+                draw.text(
+                    (w - 430, h - 50),
+                    label_text,
+                    fill=(255, 255, 255),
+                    font=label_font,
+                )
+
+                pos_idx = img_count % 4
+                current_canvas.paste(img, positions[pos_idx])
+                img_count += 1
+
+                if img_count % 4 == 0:
+                    pages.append(current_canvas)
+                    current_canvas = Image.new("RGB", (2480, 3508), "white")
+                    draw_header(current_canvas, header_title)
+
+        if img_count % 4 != 0:
+            pages.append(current_canvas)
+
+        day_str = str(now.day)
+        date_str = f"{day_str}{now.strftime('%b%Y')}"
+        filename = f"Inspection_{machine_no}_Unit{unit}_{date_str}.pdf"
+        pdf_path = os.path.join(OUTPUT_DIR, filename)
+
+        if pages:
+            pages[0].save(
+                pdf_path,
+                "PDF",
+                resolution=300.0,
+                save_all=True,
+                append_images=pages[1:],
+            )
+
+        email_status = "กำลังส่งอีเมลเบื้องหลัง..."
+        if RECEIVER_EMAIL:
+            file_url = url_for("download", filename=filename, _external=True)
+            send_pdf_email_async(RECEIVER_EMAIL, filename, pdf_path, file_url)
+            email_status = f"ระบบกำลังส่งอีเมลไปยัง {RECEIVER_EMAIL}"
+
+        return redirect(
+            url_for("result", filename=filename, status=email_status)
+        )
+
+    except Exception as e:
+        return f"เกิดข้อผิดพลาดใน Inspection: {e}", 500
