@@ -19,7 +19,6 @@ configuration = sib_api_v3_sdk.Configuration()
 if BREVO_API_KEY:
     configuration.api_key['api-key'] = BREVO_API_KEY
 
-
 def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
     def send_task():
         try:
@@ -52,9 +51,7 @@ def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
             if os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f:
                     encoded_file = base64.b64encode(f.read()).decode("utf-8")
-                attachment_list.append(
-                    {"content": encoded_file, "name": filename}
-                )
+                attachment_list.append({"content": encoded_file, "name": filename})
 
             send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
                 to=to,
@@ -72,7 +69,6 @@ def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
     thread = threading.Thread(target=send_task)
     thread.start()
 
-
 def process_inspection(request):
     try:
         machine_no = request.form.get("machine_no", "").strip()
@@ -80,7 +76,7 @@ def process_inspection(request):
         files = request.files.getlist("photos")
 
         if not files or files[0].filename == "":
-            return jsonify({"error": "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป"}), 400
+            return jsonify({"status": "error", "message": "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป"}), 400
 
         positions = [(40, 180), (1280, 180), (40, 1840), (1280, 1840)]
         pages = []
@@ -102,16 +98,8 @@ def process_inspection(request):
                 break
 
         try:
-            header_font = (
-                ImageFont.truetype(font_path, 100)
-                if font_path
-                else ImageFont.load_default()
-            )
-            label_font = (
-                ImageFont.truetype(font_path, 36)
-                if font_path
-                else ImageFont.load_default()
-            )
+            header_font = ImageFont.truetype(font_path, 100) if font_path else ImageFont.load_default()
+            label_font = ImageFont.truetype(font_path, 36) if font_path else ImageFont.load_default()
         except Exception:
             header_font = label_font = ImageFont.load_default()
 
@@ -120,9 +108,7 @@ def process_inspection(request):
             bbox = draw_ctx.textbbox((0, 0), text_to_draw, font=header_font)
             text_width = bbox[2] - bbox[0]
             x_pos = (2480 - text_width) // 2
-            draw_ctx.text(
-                (x_pos, 45), text_to_draw, fill=(0, 0, 0), font=header_font
-            )
+            draw_ctx.text((x_pos, 45), text_to_draw, fill=(0, 0, 0), font=header_font)
 
         draw_header(current_canvas, header_title)
 
@@ -136,12 +122,7 @@ def process_inspection(request):
                 w, h = img.size
 
                 draw.rectangle([(w - 450, h - 60), (w, h)], fill=(0, 0, 0))
-                draw.text(
-                    (w - 430, h - 50),
-                    label_text,
-                    fill=(255, 255, 255),
-                    font=label_font,
-                )
+                draw.text((w - 430, h - 50), label_text, fill=(255, 255, 255), font=label_font)
 
                 pos_idx = img_count % 4
                 current_canvas.paste(img, positions[pos_idx])
@@ -161,22 +142,17 @@ def process_inspection(request):
         pdf_path = os.path.join(OUTPUT_DIR, filename)
 
         if pages:
-            pages[0].save(
-                pdf_path,
-                "PDF",
-                resolution=300.0,
-                save_all=True,
-                append_images=pages[1:],
-            )
+            pages[0].save(pdf_path, "PDF", resolution=300.0, save_all=True, append_images=pages[1:])
 
-        email_status = "ระบบกำลังส่งอีเมลเบื้องหลัง..."
+        email_status = "กำลังส่งอีเมลเบื้องหลัง..."
         if RECEIVER_EMAIL:
             file_url = url_for("download", filename=filename, _external=True)
             send_pdf_email_async(RECEIVER_EMAIL, filename, pdf_path, file_url)
             email_status = f"ระบบกำลังส่งอีเมลไปยัง {RECEIVER_EMAIL}"
 
+        # ส่ง JSON redirect_url ให้ JavaScript รับไปทำงานต่อ
         redirect_url = url_for("result", filename=filename, status=email_status)
-        return jsonify({"redirect_url": redirect_url})
+        return jsonify({"status": "success", "redirect_url": redirect_url})
 
     except Exception as e:
-        return jsonify({"error": f"เกิดข้อผิดพลาดใน Inspection: {e}"}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
