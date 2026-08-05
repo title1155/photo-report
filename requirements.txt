@@ -3,3 +3,4 @@ pillow
 gunicorn
 Flask-Mail
 sib-api-v3-sdk
+reportlab
