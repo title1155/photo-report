@@ -1,7 +1,8 @@
 import base64
 import os
+import threading
 from datetime import datetime
-from flask import redirect, url_for
+from flask import jsonify, url_for
 from PIL import Image, ImageDraw, ImageFont
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
@@ -19,52 +20,55 @@ if BREVO_API_KEY:
     configuration.api_key['api-key'] = BREVO_API_KEY
 
 
-def send_pdf_email(receiver_email, filename, pdf_path, pdf_url):
-    api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
-        sib_api_v3_sdk.ApiClient(configuration)
-    )
-    sender = {"name": SENDER_NAME, "email": SENDER_EMAIL}
-    to = [{"email": receiver_email}]
-    subject = f"📄 รายงาน Hot Press PDF: {filename}"
+def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
+    def send_task():
+        try:
+            api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
+                sib_api_v3_sdk.ApiClient(configuration)
+            )
+            sender = {"name": SENDER_NAME, "email": SENDER_EMAIL}
+            to = [{"email": receiver_email}]
+            subject = f"📄 รายงาน Hot Press PDF: {filename}"
 
-    html_content = f"""
-    <html>
-      <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8fafc;">
-        <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; border: 1px solid #e2e8f0;">
-            <h2 style="color: #2563eb; margin-top: 0;">✅ สร้างไฟล์ Hot Press PDF สำเร็จแล้ว</h2>
-            <p style="font-size: 16px; color: #334155;">ชื่อไฟล์: <strong>{filename}</strong></p>
-            <p style="font-size: 16px; color: #334155;">ระบบได้แนบไฟล์ PDF มากับอีเมลฉบับนี้เรียบร้อยแล้วครับ</p>
-            <br>
-            <div style="text-align: center;">
-                <a href="{pdf_url}" style="padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
-                    🌐 หรือกดดูผ่านเว็บไซต์
-                </a>
-            </div>
-        </div>
-      </body>
-    </html>
-    """
+            html_content = f"""
+            <html>
+              <body style="font-family: Arial, sans-serif; padding: 20px; background-color: #f8fafc;">
+                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; border: 1px solid #e2e8f0;">
+                    <h2 style="color: #2563eb; margin-top: 0;">✅ สร้างไฟล์ Hot Press PDF สำเร็จแล้ว</h2>
+                    <p style="font-size: 16px; color: #334155;">ชื่อไฟล์: <strong>{filename}</strong></p>
+                    <p style="font-size: 16px; color: #334155;">ระบบได้แนบไฟล์ PDF มากับอีเมลฉบับนี้เรียบร้อยแล้วครับ</p>
+                    <br>
+                    <div style="text-align: center;">
+                        <a href="{pdf_url}" style="padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">
+                            🌐 หรือกดดูผ่านเว็บไซต์
+                        </a>
+                    </div>
+                </div>
+              </body>
+            </html>
+            """
 
-    attachment_list = []
-    if os.path.exists(pdf_path):
-        with open(pdf_path, "rb") as f:
-            encoded_file = base64.b64encode(f.read()).decode("utf-8")
-        attachment_list.append({"content": encoded_file, "name": filename})
+            attachment_list = []
+            if os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    encoded_file = base64.b64encode(f.read()).decode("utf-8")
+                attachment_list.append({"content": encoded_file, "name": filename})
 
-    send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
-        to=to,
-        sender=sender,
-        subject=subject,
-        html_content=html_content,
-        attachment=attachment_list,
-    )
+            send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
+                to=to,
+                sender=sender,
+                subject=subject,
+                html_content=html_content,
+                attachment=attachment_list,
+            )
 
-    try:
-        api_instance.send_transac_email(send_smtp_email)
-        return True
-    except ApiException as e:
-        print("Error sending email:", e)
-        return False
+            api_instance.send_transac_email(send_smtp_email)
+            print(f"Async email sent successfully for {filename}")
+        except ApiException as e:
+            print("Error sending email async:", e)
+
+    thread = threading.Thread(target=send_task)
+    thread.start()
 
 
 def process_hotpress(request):
@@ -74,7 +78,7 @@ def process_hotpress(request):
         files = request.files.getlist("photos")
 
         if not files or files[0].filename == "":
-            return "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป", 400
+            return jsonify({"error": "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป"}), 400
 
         positions = [(40, 180), (1280, 180), (40, 1840), (1280, 1840)]
         pages = []
@@ -125,7 +129,7 @@ def process_hotpress(request):
         for i, file in enumerate(files):
             with Image.open(file) as raw_img:
                 img = raw_img.convert("RGB")
-                img.thumbnail((1160, 1600))
+                img.thumbnail((1160, 1600), Image.Resampling.LANCZOS)
 
                 draw = ImageDraw.Draw(img)
                 label_text = f"#{i+1} | {timestamp_str}"
@@ -170,17 +174,14 @@ def process_hotpress(request):
                 append_images=pages[1:],
             )
 
-        email_status = "ไม่ได้ส่งอีเมล"
+        email_status = "ระบบกำลังส่งอีเมลเบื้องหลัง..."
         if RECEIVER_EMAIL:
             file_url = url_for("download", filename=filename, _external=True)
-            if send_pdf_email(RECEIVER_EMAIL, filename, pdf_path, file_url):
-                email_status = f"ส่งอีเมลสำเร็จไปยัง {RECEIVER_EMAIL}"
-            else:
-                email_status = "เกิดข้อผิดพลาดในการส่งอีเมล"
+            send_pdf_email_async(RECEIVER_EMAIL, filename, pdf_path, file_url)
+            email_status = f"ระบบกำลังส่งอีเมลไปยัง {RECEIVER_EMAIL}"
 
-        return redirect(
-            url_for("result", filename=filename, status=email_status)
-        )
+        redirect_url = url_for("result", filename=filename, status=email_status)
+        return jsonify({"redirect_url": redirect_url})
 
     except Exception as e:
-        return f"เกิดข้อผิดพลาดใน Hot Press: {e}", 500
+        return jsonify({"error": f"เกิดข้อผิดพลาดใน Hot Press: {e}"}), 500

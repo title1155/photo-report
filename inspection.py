@@ -2,7 +2,7 @@ import base64
 import os
 import threading
 from datetime import datetime
-from flask import redirect, url_for
+from flask import jsonify, url_for
 from PIL import Image, ImageDraw, ImageFont
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
@@ -21,7 +21,6 @@ if BREVO_API_KEY:
 
 
 def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
-    """ส่งอีเมลเบื้องหลัง (Background Thread) หน้าเว็บจะตอบสนองทันที"""
     def send_task():
         try:
             api_instance = sib_api_v3_sdk.TransactionalEmailsApi(
@@ -81,9 +80,8 @@ def process_inspection(request):
         files = request.files.getlist("photos")
 
         if not files or files[0].filename == "":
-            return "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป", 400
+            return jsonify({"error": "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป"}), 400
 
-        # ตำแหน่งวางรูป 4 รูปต่อหน้า
         positions = [(40, 180), (1280, 180), (40, 1840), (1280, 1840)]
         pages = []
         current_canvas = Image.new("RGB", (2480, 3508), "white")
@@ -93,7 +91,6 @@ def process_inspection(request):
 
         header_title = f"MC: {machine_no} | UNIT: {unit}"
 
-        # ดึง Font ครั้งเดียวเพื่อลดภาระ RAM
         font_path = None
         for path in [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -132,7 +129,6 @@ def process_inspection(request):
         for i, file in enumerate(files):
             with Image.open(file) as raw_img:
                 img = raw_img.convert("RGB")
-                # ใช้ Fast Resampling + LANCZOS เพื่อประมวลผลไวแต่รูปยังคมชัดกริบ
                 img.thumbnail((1160, 1600), Image.Resampling.LANCZOS)
 
                 draw = ImageDraw.Draw(img)
@@ -173,15 +169,14 @@ def process_inspection(request):
                 append_images=pages[1:],
             )
 
-        email_status = "กำลังส่งอีเมลเบื้องหลัง..."
+        email_status = "ระบบกำลังส่งอีเมลเบื้องหลัง..."
         if RECEIVER_EMAIL:
             file_url = url_for("download", filename=filename, _external=True)
             send_pdf_email_async(RECEIVER_EMAIL, filename, pdf_path, file_url)
             email_status = f"ระบบกำลังส่งอีเมลไปยัง {RECEIVER_EMAIL}"
 
-        return redirect(
-            url_for("result", filename=filename, status=email_status)
-        )
+        redirect_url = url_for("result", filename=filename, status=email_status)
+        return jsonify({"redirect_url": redirect_url})
 
     except Exception as e:
-        return f"เกิดข้อผิดพลาดใน Inspection: {e}", 500
+        return jsonify({"error": f"เกิดข้อผิดพลาดใน Inspection: {e}"}), 500
