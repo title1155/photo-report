@@ -1,71 +1,157 @@
-<script>
-        const form = document.getElementById('uploadForm');
-        const submitBtn = document.getElementById('submitBtn');
-        const progressContainer = document.getElementById('progressContainer');
-        const progressBar = document.getElementById('progressBar');
-        const progressText = document.getElementById('progressText');
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inspection Report</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; 
+            background-color: #f8fafc; 
+            padding: 20px 15px; 
+            margin: 0; 
+            color: #1e293b; 
+        }
+        .card { 
+            max-width: 480px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 24px 20px; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06); 
+            border: 1px solid #e2e8f0; 
+        }
+        label { 
+            font-weight: bold; 
+            font-size: 16px; 
+            display: block; 
+            margin-top: 18px; 
+            margin-bottom: 8px; 
+            color: #0f172a; 
+        }
+        input[type="text"], input[type="file"] { 
+            width: 100%; 
+            padding: 14px; 
+            font-size: 16px; 
+            border: 1px solid #cbd5e1; 
+            border-radius: 10px; 
+            background-color: #fff; 
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #059669;
+            box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+        }
+        .btn-submit { 
+            width: 100%; 
+            margin-top: 25px; 
+            padding: 16px; 
+            background: #059669; 
+            color: white; 
+            border: none; 
+            font-size: 18px; 
+            font-weight: bold; 
+            border-radius: 12px; 
+            cursor: pointer; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1); 
+            transition: background-color 0.2s;
+        }
+        .btn-submit:hover {
+            background-color: #047857;
+        }
+        .btn-submit:disabled { 
+            background-color: #94a3b8; 
+            cursor: not-allowed; 
+            box-shadow: none;
+        }
+        .back-link { 
+            display: inline-block; 
+            margin-bottom: 15px; 
+            color: #64748b; 
+            text-decoration: none; 
+            font-size: 15px; 
+            font-weight: 500; 
+        }
+        .back-link:hover {
+            color: #0f172a;
+        }
+        
+        /* สไตล์สำหรับ Loading Overlay (เลือกใช้แบบนี้แทน Progress Bar เพื่อความเสถียร) */
+        #loadingOverlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.9);
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .spinner {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid #059669;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-text {
+            font-size: 18px;
+            font-weight: bold;
+            color: #0f172a;
+            text-align: center;
+            padding: 0 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- หน้าจอ Loading ที่จะแสดงตอนกดส่ง -->
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">กำลังอัปโหลดรูปภาพและสร้าง PDF...<br>(อาจใช้เวลา 1-2 นาที กรุณาอย่าปิดหน้านี้)</div>
+    </div>
 
-        form.addEventListener('submit', function(e) {
-            e.preventDefault(); // ป้องกันการ reload หน้าแบบปกติ
+    <div class="card">
+        <a href="/" class="back-link">← กลับหน้าหลัก</a>
+        <h2 style="color: #059669; margin-top: 0; font-size: 22px;">🔍 Inspection Report</h2>
+        
+        <!-- กลับมาใช้ Standard HTML Form Submit (onsubmit เพื่อแสดง Loading) -->
+        <form action="/inspection/create" method="POST" enctype="multipart/form-data" onsubmit="showLoading();">
+            <label for="machine_no">Machine No:</label>
+            <input type="text" id="machine_no" name="machine_no" placeholder="เช่น 16R" required>
 
-            const formData = new FormData(form);
-            const xhr = new XMLHttpRequest();
+            <label for="unit">Unit:</label>
+            <input type="text" id="unit" name="unit" placeholder="เช่น 8" required>
 
-            // แสดง Progress Bar และปิดปุ่มกด
-            progressContainer.style.display = 'block';
-            submitBtn.disabled = true;
-            submitBtn.innerText = '⏳ กำลังประมวลผล...';
+            <label for="photos">เลือกรูปภาพ (แนะนำ 14 รูป):</label>
+            <!-- ลบ multiple ออกชั่วคราวถ้าต้องการให้เลือกทีละรูป หรือคงไว้ถ้าเลือกจากอัลบั้มได้ -->
+            <input type="file" id="photos" name="photos" multiple accept="image/*" required>
 
-            // ดักจับ Event ตอนอัปโหลดไฟล์
-            xhr.upload.addEventListener('progress', function(e) {
-                if (e.lengthComputable) {
-                    const percent = Math.round((e.loaded / e.total) * 100);
-                    progressBar.style.width = percent + '%';
-                    
-                    if (percent < 100) {
-                        progressText.innerText = `กำลังอัปโหลดรูป... ${percent}%`;
-                    } else {
-                        // เมื่ออัปโหลดครบ 100% แล้ว ให้แจ้งว่ากำลังสร้าง PDF
-                        progressText.innerText = `กำลังสร้าง PDF และส่งอีเมล... (อาจใช้เวลา 1-2 นาที)`;
-                    }
-                }
-            });
+            <button type="submit" id="submitBtn" class="btn-submit">⚡ สร้าง PDF Inspection</button>
+        </form>
+    </div>
 
-            // เมื่อเซิร์ฟเวอร์ตอบกลับมา (สร้าง PDF เสร็จ)
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    // แปลงค่า JSON ที่ได้จากเซิร์ฟเวอร์
-                    try {
-                        const response = JSON.parse(xhr.responseText);
-                        // ถ้ามี redirect_url ให้สั่งเบราว์เซอร์เปลี่ยนหน้าไป URL นั้น
-                        if (response.redirect_url) {
-                            window.location.href = response.redirect_url;
-                        } else {
-                            alert('เกิดข้อผิดพลาด: ไม่ได้รับ URL สำหรับเปลี่ยนหน้า');
-                        }
-                    } catch (err) {
-                        alert('เกิดข้อผิดพลาดในการอ่านข้อมูลจากเซิร์ฟเวอร์');
-                        console.error(err);
-                    }
-                } else {
-                    // กรณีเซิร์ฟเวอร์พัง (เช่น Timeout)
-                    alert('เกิดข้อผิดพลาดในการประมวลผล (Timeout หรือเซิร์ฟเวอร์หนืดเกินไป) กรุณาลองใหม่อีกครั้ง หรือลดจำนวนรูปลง');
-                    submitBtn.disabled = false;
-                    submitBtn.innerText = '⚡ สร้าง PDF Inspection';
-                    progressContainer.style.display = 'none';
-                }
-            };
-
-            // กรณีเชื่อมต่อไม่ได้
-            xhr.onerror = function() {
-                alert('การเชื่อมต่อล้มเหลว กรุณาตรวจสอบอินเทอร์เน็ต');
-                submitBtn.disabled = false;
-                submitBtn.innerText = '⚡ สร้าง PDF Inspection';
-                progressContainer.style.display = 'none';
-            };
-
-            // ส่งข้อมูลแบบ POST ไปยัง URL ของฟอร์ม
-            xhr.open('POST', form.action, true);
-            xhr.send(formData);
-        });
+    <script>
+        function showLoading() {
+            // ปิดปุ่มกดเพื่อป้องกันการกดซ้ำ
+            const btn = document.getElementById('submitBtn');
+            btn.disabled = true;
+            btn.innerText = '⏳ กำลังประมวลผล...';
+            
+            // แสดงหน้าจอ Loading แบบเต็มจอ
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            
+            return true; // อนุญาตให้ Form ส่งข้อมูลแบบปกติ
+        }
     </script>
+</body>
+</html>
