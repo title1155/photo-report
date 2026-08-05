@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Photo Report - Success</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; 
+            text-align: center; 
+            background-color: #f8fafc; 
+            padding: 30px 15px; 
+            margin: 0; 
+            color: #1e293b;
+        }
+        .card { 
+            max-width: 480px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 30px 20px; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06); 
+            border: 1px solid #e2e8f0;
+        }
+        h1 { color: #16a34a; font-size: 26px; margin-top: 0; margin-bottom: 15px; }
+        .filename-box { color: #0f172a; font-size: 16px; word-break: break-all; margin: 15px 0; }
+        .status-box { 
+            color: #2563eb; 
+            font-size: 14px; 
+            font-weight: bold; 
+            background: #eff6ff; 
+            padding: 12px; 
+            border-radius: 10px; 
+            margin-bottom: 25px;
+            border: 1px solid #dbeafe;
+        }
+        .btn-action { 
+            display: block; 
+            width: 100%; 
+            font-size: 18px; 
+            padding: 16px; 
+            border: none; 
+            border-radius: 12px; 
+            cursor: pointer; 
+            font-weight: bold; 
+            color: white; 
+            text-decoration: none;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            margin-bottom: 12px;
+        }
+        .btn-view { background-color: #2563eb; }
+        .btn-share { background-color: #059669; }
+        .btn-action:active { opacity: 0.9; transform: scale(0.98); }
+        .back-link { display: inline-block; margin-top: 15px; color: #64748b; text-decoration: none; font-size: 15px; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>✅ สร้าง PDF สำเร็จ</h1>
+        <div class="filename-box">ชื่อไฟล์: <strong>{{ filename }}</strong></div>
+        <div class="status-box">📬 สถานะอีเมล: {{ status }}</div>
+        
+        <a href="/download/{{ filename }}" class="btn-action btn-view">
+            👁️ เปิดดู / แชร์ไฟล์ PDF
+        </a>
+
+        <button onclick="shareLink('{{ file_url }}')" class="btn-action btn-share">
+            🔗 ส่งลิงก์ PDF เข้า LINE / แอปอื่น
+        </button>
+
+        <a href="/" class="back-link">← กลับหน้าหลัก</a>
+    </div>
+
+    <script>
+    function shareLink(url) {
+        if (navigator.share) {
+            navigator.share({
+                title: 'Photo Report PDF',
+                text: 'ไฟล์เอกสาร PDF: {{ filename }}',
+                url: url
+            }).catch(console.error);
+        } else {
+            navigator.clipboard.writeText(url);
+            alert('คัดลอกลิงก์ดาวน์โหลดเรียบร้อยแล้ว!');
+        }
+    }
+    </script>
+</body>
+</html>
