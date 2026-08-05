@@ -3,8 +3,9 @@ from flask import Flask, render_template, send_from_directory, request
 from hotpress import process_hotpress
 from inspection import process_inspection
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 OUTPUT_DIR = "generated"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 @app.route("/")
 def index():
