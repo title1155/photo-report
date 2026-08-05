@@ -2,7 +2,7 @@ import base64
 import os
 import threading
 from datetime import datetime
-from flask import redirect, url_for, request
+from flask import redirect, url_for, request # IMPORT request ตรงนี้ที่เดียว
 from PIL import Image, ImageDraw, ImageFont
 import sib_api_v3_sdk
 from sib_api_v3_sdk.rest import ApiException
@@ -55,9 +55,6 @@ def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
                             🌐 หรือกดดูและดาวน์โหลดผ่านเว็บไซต์
                         </a>
                     </div>
-                    <p style="font-size: 12px; color: #94a3b8; margin-top: 30px; text-align: center;">
-                        นี่คืออีเมลอัตโนมัติจากระบบ Photo Report ไม่ต้องตอบกลับอีเมลนี้
-                    </p>
                 </div>
               </body>
             </html>
@@ -95,8 +92,8 @@ def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
     thread.start()
 
 
-def process_inspection(request):
-    """ฟังก์ชันหลักในการประมวลผลข้อมูลฟอร์มและสร้าง PDF"""
+def process_inspection(request): # รับ request object มาจาก app.py
+    """ฟังก์ชันหลักในการประมวลผลข้อมูลฟอร์มและสร้าง PDF (เวอร์ชัน Standard Submit)"""
     try:
         # รับค่าจากฟอร์ม
         machine_no = request.form.get("machine_no", "").strip()
@@ -108,31 +105,29 @@ def process_inspection(request):
             return "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป", 400
 
         # กำหนดตำแหน่งวางรูป 4 รูปต่อหน้า A4 (หน่วยเป็นพิกเซลที่ 300 DPI)
-        # ขนาดหน้า A4 ที่ 300 DPI คือ 2480x3508 พิกเซล
         positions = [(40, 180), (1280, 180), (40, 1840), (1280, 1840)]
         
-        pages = [] # เก็บหน้า A4 แต่ละหน้า
-        current_canvas = Image.new("RGB", (2480, 3508), "white") # สร้างหน้าว่าง
+        pages = [] 
+        current_canvas = Image.new("RGB", (2480, 3508), "white") 
         img_count = 0
         now = datetime.now()
-        timestamp_str = now.strftime("%Y-%m-%d %H:%M") # เวลาสำหรับ Label บนรูป
+        timestamp_str = now.strftime("%Y-%m-%d %H:%M")
 
         # ข้อความหัวกระดาษ
         header_title = f"MC: {machine_no} | UNIT: {unit}"
 
-        # พยายามโหลด Font ภาษาไทย/English (DejaVuSans มีติดมากับ Linux ส่วนใหญ่)
+        # พยายามโหลด Font
         font_path = None
         possible_fonts = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "arial.ttf", # สำหรับ Windows
+            "arial.ttf",
         ]
         for path in possible_fonts:
             if os.path.exists(path):
                 font_path = path
                 break
 
-        # ตั้งค่า Font Size
         try:
             if font_path:
                 header_font = ImageFont.truetype(font_path, 100)
@@ -142,10 +137,9 @@ def process_inspection(request):
         except Exception:
             header_font = label_font = ImageFont.load_default()
 
-        # ฟังก์ชันสำหรับวาดหัวกระดาษ (วาดซ้ำทุกหน้า)
+        # ฟังก์ชันสำหรับวาดหัวกระดาษ
         def draw_header(canvas_img, text_to_draw):
             draw_ctx = ImageDraw.Draw(canvas_img)
-            # คำนวณให้ข้อความอยู่ตรงกลาง
             bbox = draw_ctx.textbbox((0, 0), text_to_draw, font=header_font)
             text_width = bbox[2] - bbox[0]
             x_pos = (2480 - text_width) // 2
@@ -156,23 +150,18 @@ def process_inspection(request):
         # วาดหัวกระดาษหน้าแรก
         draw_header(current_canvas, header_title)
 
-        # วนลูปประมวลผลรูปภาพทีละรูป
+        # วนลูปประมวลผลรูปภาพ
         for i, file in enumerate(files):
             try:
                 with Image.open(file) as raw_img:
-                    # แปลงเป็น RGB และปรับขนาดให้พอดีช่อง (thumbnail)
                     img = raw_img.convert("RGB")
-                    # thumbnail จะรักษาอัตราส่วนภาพไว้ ไม่ให้ภาพบี้
                     img.thumbnail((1160, 1600), Image.Resampling.LANCZOS)
 
-                    # วาด Label (ลำดับรูป + เวลา) ลงบนรูปภาพ
                     draw = ImageDraw.Draw(img)
                     label_text = f"#{i+1} | {timestamp_str}"
                     w, h = img.size
 
-                    # วาดแถบพื้นหลังสีดำตรงมุมขวาล่างเพื่อให้เห็นข้อความชัดเจน
                     draw.rectangle([(w - 450, h - 60), (w, h)], fill=(0, 0, 0))
-                    # วาดข้อความสีขาว
                     draw.text(
                         (w - 430, h - 50),
                         label_text,
@@ -180,32 +169,28 @@ def process_inspection(request):
                         font=label_font,
                     )
 
-                    # แปะรูปภาพลงบนหน้า A4 ตามตำแหน่งที่กำหนด
                     pos_idx = img_count % 4
                     current_canvas.paste(img, positions[pos_idx])
                     img_count += 1
 
-                    # ถ้าครบ 4 รูป ให้บันทึกหน้านี้แล้วสร้างหน้าใหม่
                     if img_count % 4 == 0:
                         pages.append(current_canvas)
                         current_canvas = Image.new("RGB", (2480, 3508), "white")
-                        draw_header(current_canvas, header_title) # วาดหัวกระดาษหน้าใหม่
+                        draw_header(current_canvas, header_title)
                         
             except Exception as img_err:
                 print(f"Error processing image {i+1}: {img_err}")
-                # ข้ามรูปที่เสียไป
 
-        # ถ้ามีรูปเหลือแต่ไม่ครบ 4 รูป ให้เพิ่มหน้านั้นเข้าไปด้วย
         if img_count % 4 != 0:
             pages.append(current_canvas)
 
         # ตั้งชื่อไฟล์ PDF
         day_str = str(now.day)
-        date_str = f"{day_str}{now.strftime('%b%Y')}" # เช่น 5Aug2026
+        date_str = f"{day_str}{now.strftime('%b%Y')}" 
         filename = f"Inspection_{machine_no}_Unit{unit}_{date_str}.pdf"
         pdf_path = os.path.join(OUTPUT_DIR, filename)
 
-        # บันทึกรูปภาพทั้งหมดเป็นไฟล์ PDF (300 DPI)
+        # บันทึกรูปภาพเป็น PDF (300 DPI)
         if pages:
             pages[0].save(
                 pdf_path,
@@ -217,19 +202,21 @@ def process_inspection(request):
         else:
             return "ไม่สามารถสร้าง PDF ได้เนื่องจากไม่มีรูปภาพที่ใช้งานได้", 500
 
-        # เริ่มกระบวนการส่งอีเมลเบื้องหลัง
+        # ส่งอีเมลเบื้องหลัง
         email_status = "กำลังส่งอีเมลเบื้องหลัง..."
         if RECEIVER_EMAIL:
-            # สร้าง URL สำหรับดูไฟล์บนเว็บ
             file_url = url_for("download", filename=filename, _external=True)
             send_pdf_email_async(RECEIVER_EMAIL, filename, pdf_path, file_url)
             email_status = f"ระบบกำลังส่งอีเมลไปยัง {RECEIVER_EMAIL}"
 
-        # **สำคัญ** กลับไปใช้ redirect แบบเดิมที่เสถียรที่สุด ไม่ต้องผ่าน JSON
+        # **สำคัญที่สุด** กลับมาใช้ redirect แบบเดิมที่เสถียรที่สุด 100% แก้จอขาวได้ถาวร
         return redirect(
             url_for("result", filename=filename, status=email_status)
         )
 
     except Exception as e:
         print(f"Error in process_inspection: {e}")
-        return f"เกิดข้อผิดพลาดร้ายแรง: {e}", 500
+        # เพิ่ม traceback เพื่อดูรายละเอียด Error บน Log
+        import traceback
+        traceback.print_exc()
+        return f"เกิดข้อผิดพลาดร้ายแรงบนเซิร์ฟเวอร์: {e}", 500
