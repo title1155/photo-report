@@ -1,4 +1,109 @@
-<script>
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hot Press Report</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { 
+            font-family: system-ui, -apple-system, sans-serif; 
+            background-color: #f8fafc; 
+            padding: 20px 15px; 
+            margin: 0; 
+            color: #1e293b;
+        }
+        .card { 
+            max-width: 480px; 
+            margin: 0 auto; 
+            background: #ffffff; 
+            padding: 24px 20px; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08); 
+            border: 1px solid #e2e8f0;
+        }
+        label { font-weight: bold; font-size: 16px; display: block; margin-top: 18px; margin-bottom: 8px; color: #0f172a; }
+        input[type="text"], input[type="file"] { 
+            width: 100%; 
+            padding: 14px; 
+            font-size: 16px; 
+            border: 1px solid #cbd5e1; 
+            border-radius: 10px; 
+            background-color: #fff;
+        }
+        .radio-group { display: flex; flex-direction: column; gap: 10px; background: #f1f5f9; padding: 14px; border-radius: 10px; }
+        .radio-item { display: flex; align-items: center; gap: 10px; font-weight: 500; font-size: 16px; margin: 0; cursor: pointer; }
+        .radio-item input[type="radio"] { width: 20px; height: 20px; }
+        .btn-submit { 
+            width: 100%; 
+            margin-top: 25px; 
+            padding: 16px; 
+            background: #2563eb; 
+            color: white; 
+            border: none; 
+            font-size: 18px; 
+            font-weight: bold; 
+            border-radius: 12px; 
+            cursor: pointer; 
+        }
+        .back-link { display: inline-block; margin-bottom: 15px; color: #64748b; text-decoration: none; font-size: 15px; font-weight: 500; }
+        
+        .progress-container {
+            display: none;
+            margin-top: 20px;
+            background-color: #e2e8f0;
+            border-radius: 10px;
+            height: 24px;
+            position: relative;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #2563eb;
+            transition: width 0.2s ease;
+        }
+        .progress-text {
+            position: absolute;
+            width: 100%;
+            text-align: center;
+            top: 3px;
+            font-size: 13px;
+            font-weight: bold;
+            color: #0f172a;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <a href="/" class="back-link">← กลับหน้าหลัก</a>
+        <h2 style="color: #2563eb; margin-top: 0; font-size: 22px;">🔥 Hot Press Report</h2>
+        
+        <form id="uploadForm" action="/hotpress/create" method="POST" enctype="multipart/form-data">
+            <label for="size">SIZE / ชื่อรายงาน:</label>
+            <input type="text" id="size" name="size" placeholder="เช่น 1234" required>
+
+            <label>RESULT:</label>
+            <div class="radio-group">
+                <label class="radio-item"><input type="radio" name="result" value="RC OK" checked> 1. RC OK</label>
+                <label class="radio-item"><input type="radio" name="result" value="RC NG"> 2. RC NG</label>
+                <label class="radio-item"><input type="radio" name="result" value="Mold NG"> 3. Mold NG</label>
+                <label class="radio-item"><input type="radio" name="result" value="Test"> 4. Test</label>
+            </div>
+
+            <label for="photos">เลือกรูปภาพ (4 รูป):</label>
+            <input type="file" id="photos" name="photos" multiple accept="image/*" required>
+
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+                <div class="progress-text" id="progressText">กำลังอัปโหลด... 0%</div>
+            </div>
+
+            <button type="submit" id="submitBtn" class="btn-submit">⚡ สร้าง PDF Hot Press</button>
+        </form>
+    </div>
+
+    <script>
         const form = document.getElementById('uploadForm');
         const submitBtn = document.getElementById('submitBtn');
         const progressContainer = document.getElementById('progressContainer');
@@ -7,7 +112,6 @@
 
         form.addEventListener('submit', function(e) {
             e.preventDefault();
-
             const formData = new FormData(form);
             const xhr = new XMLHttpRequest();
 
@@ -19,7 +123,6 @@
                 if (e.lengthComputable) {
                     const percent = Math.round((e.loaded / e.total) * 100);
                     progressBar.style.width = percent + '%';
-                    
                     if (percent < 100) {
                         progressText.innerText = `กำลังอัปโหลดรูป... ${percent}%`;
                     } else {
@@ -30,26 +133,20 @@
 
             xhr.onload = function() {
                 if (xhr.status === 200) {
-                    const response = JSON.parse(xhr.responseText);
-                    if (response.redirect_url) {
-                        window.location.href = response.redirect_url;
-                    }
-                } else {
-                    alert('เกิดข้อผิดพลาดในการประมวลผล กรุณาลองใหม่อีกครั้ง');
-                    submitBtn.disabled = false;
-                    submitBtn.innerText = '⚡ สร้าง PDF Hot Press';
-                    progressContainer.style.display = 'none';
+                    try {
+                        const res = JSON.parse(xhr.responseText);
+                        if (res.redirect_url) {
+                            window.location.href = res.redirect_url;
+                            return;
+                        }
+                    } catch(err) {}
                 }
-            };
-
-            xhr.onerror = function() {
-                alert('การเชื่อมต่อล้มเหลว กรุณาตรวจสอบอินเทอร์เน็ต');
-                submitBtn.disabled = false;
-                submitBtn.innerText = '⚡ สร้าง PDF Hot Press';
-                progressContainer.style.display = 'none';
+                window.location.href = xhr.responseURL || '/result';
             };
 
             xhr.open('POST', form.action, true);
             xhr.send(formData);
         });
     </script>
+</body>
+</html>
