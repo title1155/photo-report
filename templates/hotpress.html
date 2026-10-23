@@ -38,13 +38,19 @@
             border-radius: 10px; 
             background-color: #fff; 
         }
+        /* ช่อง Remark ตอนถูกล็อก (Readonly) จะเปลี่ยนสีพื้นหลังให้รู้ว่าแก้ไม่ได้ */
+        input[readonly] {
+            background-color: #f1f5f9 !important;
+            color: #64748b;
+            cursor: not-allowed;
+        }
         /* แถวคู่สำหรับ Size code และ Machine No */
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
         }
-        /* ดีไซน์กล่อง Checkbox Unit 1-10 แบบ Grid บนมือถือ */
+        /* ดีไซน์กล่อง Checkbox Unit 1-10 */
         .unit-grid {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
@@ -71,6 +77,35 @@
         .unit-label input {
             width: 15px;
             height: 15px;
+            cursor: pointer;
+        }
+        /* ดีไซน์กล่องเลือก Result แบบ 2 คอลัมน์ */
+        .result-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            background: #f1f5f9;
+            padding: 10px;
+            border-radius: 10px;
+            border: 1px solid #cbd5e1;
+        }
+        .result-label {
+            font-weight: normal !important;
+            font-size: 14px !important;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0 !important;
+            cursor: pointer;
+            background: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            justify-content: center;
+            border: 1px solid #e2e8f0;
+        }
+        .result-label input {
+            width: 16px;
+            height: 16px;
             cursor: pointer;
         }
         .btn-submit { 
@@ -165,8 +200,16 @@
                 </div>
             </div>
 
+            <label>Result:</label>
+            <div class="result-grid">
+                <label class="result-label"><input type="radio" name="result_status" value="RC_OK" checked> RC OK</label>
+                <label class="result-label"><input type="radio" name="result_status" value="RC_NG"> RC NG</label>
+                <label class="result-label"><input type="radio" name="result_status" value="Mold_NG"> Mold NG</label>
+                <label class="result-label"><input type="radio" name="result_status" value="Test"> Test</label>
+            </div>
+
             <label for="remark">Remark :</label>
-            <input type="text" id="remark" name="remark" value="Mass" placeholder="หมายเหตุเพิ่มเติม">
+            <input type="text" id="remark" name="remark" value="Mass" readonly placeholder="หมายเหตุเพิ่มเติม">
 
             <label for="photos">เลือกรูปภาพ (4 รูป):</label>
             <input type="file" id="photos" name="photos" multiple accept="image/*" required>
@@ -176,6 +219,32 @@
     </div>
 
     <script>
+        // ควบคุมการเปิด/ปิดช่อง Remark ตาม Result ที่เลือก
+        const resultRadios = document.querySelectorAll('input[name="result_status"]');
+        const remarkInput = document.getElementById('remark');
+
+        function updateRemarkState() {
+            const checkedRadio = document.querySelector('input[name="result_status"]:checked');
+            if (checkedRadio && checkedRadio.value === 'Test') {
+                remarkInput.readOnly = false;
+                if (remarkInput.value === 'Mass') {
+                    remarkInput.value = ''; // เคลียร์ให้พิมพ์ใหม่ได้เมื่อเลือก Test
+                }
+                remarkInput.placeholder = 'กรอกหมายเหตุสำหรับการ Test';
+            } else {
+                remarkInput.readOnly = true;
+                remarkInput.value = 'Mass'; // ล็อกค่าเป็น Mass สำหรับกรณีอื่น
+                remarkInput.placeholder = 'หมายเหตุเพิ่มเติม';
+            }
+        }
+
+        resultRadios.forEach(radio => {
+            radio.addEventListener('change', updateRemarkState);
+        });
+
+        // รันตรวจสอบสถานะเริ่มต้นตอนโหลดหน้าเว็บ
+        updateRemarkState();
+
         function compressImage(file, maxWidth = 1600, maxHeight = 1600, quality = 0.85) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -230,6 +299,7 @@
             const sizeCode = document.getElementById('size_code').value;
             const machineNo = document.getElementById('machine_no').value;
             const remark = document.getElementById('remark').value;
+            const resultStatus = document.querySelector('input[name="result_status"]:checked').value;
             const fileInput = document.getElementById('photos');
             const files = fileInput.files;
 
@@ -237,6 +307,7 @@
             formData.append('size_code', sizeCode);
             formData.append('machine_no', machineNo);
             formData.append('remark', remark);
+            formData.append('result_status', resultStatus);
 
             const selectedUnits = document.querySelectorAll('input[name="units"]:checked');
             selectedUnits.forEach((checkbox) => {
