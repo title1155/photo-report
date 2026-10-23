@@ -12,7 +12,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 SENDER_EMAIL = "godtitle@gmail.com"
-SENDER_NAME = "Photo Report System"
+SENDER_NAME = "Hot Press Report System"
 RECEIVER_EMAIL = "ptcuringfac1@hotmail.com"
 
 configuration = sib_api_v3_sdk.Configuration()
@@ -28,6 +28,7 @@ def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
             )
             sender = {"name": SENDER_NAME, "email": SENDER_EMAIL}
             to = [{"email": receiver_email}]
+            # หัวข้ออีเมลลิงก์ตรงกับชื่อไฟล์ PDF พร้อมวันที่และรายละเอียดครบถ้วน
             subject = f"📄 รายงาน Hot Press PDF: {filename}"
 
             html_content = f"""
@@ -73,25 +74,34 @@ def send_pdf_email_async(receiver_email, filename, pdf_path, pdf_url):
 
 def process_hotpress(request):
     try:
-        raw_size = request.form.get("size", "REPORT").strip()
-        result_val = request.form.get("result", "RC OK").strip()
+        # รับค่าจากฟอร์มหน้าเว็บครบทุกฟิลด์
+        unit = request.form.get("units", "1").strip()
+        size_code = request.form.get("size_code", "").strip()
+        machine_no = request.form.get("machine_no", "").strip()
+        condition_type = request.form.get("condition_type", "Mass").strip()
+        result_status = request.form.get("result_status", "RC_OK").strip()
+        remark = request.form.get("remark", "-").strip()
+        
         files = request.files.getlist("photos")
 
         if not files or files[0].filename == "":
             return jsonify({"error": "กรุณาเลือกไฟล์ภาพอย่างน้อย 1 รูป"}), 400
 
-        positions = [(40, 180), (1280, 180), (40, 1840), (1280, 1840)]
+        # ขยับตำแหน่งรูปภาพลงเล็กน้อย (จาก 180 เป็น 240) เพื่อเผื่อพื้นที่หัวกระดาษ 2 บรรทัด
+        positions = [(40, 240), (1280, 240), (40, 1840), (1280, 1840)]
         pages = []
         current_canvas = Image.new("RGB", (2480, 3508), "white")
         img_count = 0
         now = datetime.now()
         timestamp_str = now.strftime("%Y-%m-%d %H:%M")
 
-        header_title = f"{raw_size} [{result_val}]"
+        # ข้อความหัวกระดาษแบบ 2 บรรทัด
+        header_line1 = f"U{unit} | MC: {machine_no} | Size: {size_code} | Date: {timestamp_str}"
+        header_line2 = f"Condition: {condition_type} | Result: {result_status} | Remark: {remark}"
 
-        def draw_header(canvas_img, text_to_draw):
+        def draw_header(canvas_img, l1, l2):
             draw_ctx = ImageDraw.Draw(canvas_img)
-            font_size = 110
+            font_size = 65
             font = None
             font_paths = [
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -107,13 +117,19 @@ def process_hotpress(request):
             if font is None:
                 font = ImageFont.load_default()
 
-            header_text = f"SIZE : {text_to_draw}"
-            bbox = draw_ctx.textbbox((0, 0), header_text, font=font)
-            text_width = bbox[2] - bbox[0]
-            x_pos = (2480 - text_width) // 2
-            draw_ctx.text((x_pos, 45), header_text, fill=(0, 0, 0), font=font)
+            # บรรทัดที่ 1
+            bbox1 = draw_ctx.textbbox((0, 0), l1, font=font)
+            w1 = bbox1[2] - bbox1[0]
+            x1 = (2480 - w1) // 2
+            draw_ctx.text((x1, 40), l1, fill=(0, 0, 0), font=font)
 
-        draw_header(current_canvas, header_title)
+            # บรรทัดที่ 2
+            bbox2 = draw_ctx.textbbox((0, 0), l2, font=font)
+            w2 = bbox2[2] - bbox2[0]
+            x2 = (2480 - w2) // 2
+            draw_ctx.text((x2, 120), l2, fill=(0, 0, 0), font=font)
+
+        draw_header(current_canvas, header_line1, header_line2)
 
         label_font = None
         for path in [
@@ -129,7 +145,7 @@ def process_hotpress(request):
         for i, file in enumerate(files):
             with Image.open(file) as raw_img:
                 img = raw_img.convert("RGB")
-                img.thumbnail((1160, 1600), Image.Resampling.LANCZOS)
+                img.thumbnail((1160, 1580), Image.Resampling.LANCZOS)
 
                 draw = ImageDraw.Draw(img)
                 label_text = f"#{i+1} | {timestamp_str}"
@@ -155,14 +171,15 @@ def process_hotpress(request):
                 if img_count % 4 == 0:
                     pages.append(current_canvas)
                     current_canvas = Image.new("RGB", (2480, 3508), "white")
-                    draw_header(current_canvas, header_title)
+                    draw_header(current_canvas, header_line1, header_line2)
 
         if img_count % 4 != 0:
             pages.append(current_canvas)
 
-        day_str = str(now.day)
-        date_str = f"{day_str}{now.strftime('%b%Y')}"
-        filename = f"{raw_size} {result_val} {date_str}.pdf"
+        # รูปแบบชื่อไฟล์ PDF: U[Unit]_[MC]_[Size]_[Condition]_[Result]_[Remark]_[Date].pdf
+        date_str = now.strftime("%d%b%Y") 
+        clean_remark = remark.replace(" ", "_")
+        filename = f"U{unit}_{machine_no}_{size_code}_{condition_type}_{result_status}_{clean_remark}_{date_str}.pdf"
         pdf_path = os.path.join(OUTPUT_DIR, filename)
 
         if pages:
