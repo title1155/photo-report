@@ -339,10 +339,9 @@
 
                 if (response.redirected) {
                     window.location.href = response.url;
-                } } else if (response.ok) {
-                     const data = await response.json();
-                     window.location.href = data.redirect_url || '/';
-                    }
+                } else if (response.ok) {
+                    const data = await response.json();
+                    window.location.href = data.redirect_url || '/';
                 } else {
                     alert('เกิดข้อผิดพลาดในการประมวลผล กรุณาลองใหม่อีกครั้ง');
                     overlay.style.display = 'none';
