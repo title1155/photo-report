@@ -24,53 +24,58 @@
         }
         label { 
             font-weight: bold; 
-            font-size: 16px; 
+            font-size: 15px; 
             display: block; 
-            margin-top: 18px; 
-            margin-bottom: 8px; 
+            margin-top: 15px; 
+            margin-bottom: 6px; 
             color: #0f172a; 
         }
         input[type="text"], input[type="file"] { 
             width: 100%; 
-            padding: 14px; 
-            font-size: 16px; 
+            padding: 12px; 
+            font-size: 15px; 
             border: 1px solid #cbd5e1; 
             border-radius: 10px; 
             background-color: #fff; 
+        }
+        /* แถวคู่สำหรับ Size code และ Machine No */
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
         }
         /* ดีไซน์กล่อง Checkbox Unit 1-10 แบบ Grid บนมือถือ */
         .unit-grid {
             display: grid;
             grid-template-columns: repeat(5, 1fr);
-            gap: 8px;
+            gap: 6px;
             background: #f1f5f9;
-            padding: 12px;
+            padding: 10px;
             border-radius: 10px;
             border: 1px solid #cbd5e1;
-            margin-top: 5px;
         }
         .unit-label {
             font-weight: normal !important;
-            font-size: 14px !important;
+            font-size: 13px !important;
             display: flex;
             align-items: center;
             gap: 4px;
             margin: 0 !important;
             cursor: pointer;
             background: #fff;
-            padding: 8px 4px;
+            padding: 6px 2px;
             border-radius: 6px;
             justify-content: center;
             border: 1px solid #e2e8f0;
         }
         .unit-label input {
-            width: 16px;
-            height: 16px;
+            width: 15px;
+            height: 15px;
             cursor: pointer;
         }
         .btn-submit { 
             width: 100%; 
-            margin-top: 25px; 
+            margin-top: 22px; 
             padding: 16px; 
             background: #2563eb; 
             color: white; 
@@ -87,7 +92,7 @@
         }
         .back-link { 
             display: inline-block; 
-            margin-bottom: 15px; 
+            margin-bottom: 12px; 
             color: #64748b; 
             text-decoration: none; 
             font-size: 15px; 
@@ -135,12 +140,6 @@
         <h2 style="color: #2563eb; margin-top: 0; font-size: 22px;">🔥 Hot Press Report</h2>
         
         <form id="uploadForm">
-            <label for="machine_no">Machine No:</label>
-            <input type="text" id="machine_no" name="machine_no" placeholder="เช่น 16R" required>
-
-            <label for="machine_name">ชื่อเครื่อง (Machine Name):</label>
-            <input type="text" id="machine_name" name="machine_name" placeholder="เช่น Hot Press Line A">
-
             <label>เลือก Unit (1 - 10):</label>
             <div class="unit-grid">
                 <label class="unit-label"><input type="checkbox" name="units" value="1"> U1</label>
@@ -154,6 +153,20 @@
                 <label class="unit-label"><input type="checkbox" name="units" value="9"> U9</label>
                 <label class="unit-label"><input type="checkbox" name="units" value="10"> U10</label>
             </div>
+
+            <div class="form-row">
+                <div>
+                    <label for="size_code">Size code:</label>
+                    <input type="text" id="size_code" name="size_code" placeholder="เช่น 8118" maxlength="4" required>
+                </div>
+                <div>
+                    <label for="machine_no">Machine No:</label>
+                    <input type="text" id="machine_no" name="machine_no" placeholder="เช่น 16R" required>
+                </div>
+            </div>
+
+            <label for="remark">Remark :</label>
+            <input type="text" id="remark" name="remark" value="Mass" placeholder="หมายเหตุเพิ่มเติม">
 
             <label for="photos">เลือกรูปภาพ (4 รูป):</label>
             <input type="file" id="photos" name="photos" multiple accept="image/*" required>
@@ -214,14 +227,16 @@
             submitBtn.disabled = true;
             overlay.style.display = 'flex';
 
+            const sizeCode = document.getElementById('size_code').value;
             const machineNo = document.getElementById('machine_no').value;
-            const machineName = document.getElementById('machine_name').value;
+            const remark = document.getElementById('remark').value;
             const fileInput = document.getElementById('photos');
             const files = fileInput.files;
 
             const formData = new FormData();
+            formData.append('size_code', sizeCode);
             formData.append('machine_no', machineNo);
-            formData.append('machine_name', machineName);
+            formData.append('remark', remark);
 
             const selectedUnits = document.querySelectorAll('input[name="units"]:checked');
             selectedUnits.forEach((checkbox) => {
